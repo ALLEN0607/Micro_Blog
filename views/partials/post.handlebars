@@ -1,0 +1,64 @@
+{{!-- Partial for a single post --}}
+<div class="post" id="post-{{id}}">
+    <div class="post-avatar">
+        <img src="/avatar/{{username}}" alt="{{username}}'s avatar">
+    </div>
+    <div class="post-content preserve-newlines">
+        <h3>{{title}}</h3>
+        <p>{{content}}</p>
+        <p>Posted by {{username}} at {{timestamp}}</p>
+    <div class="post-status-bar">
+        <span class="like-count">Likes: {{likes}}</span>
+        {{#ifCond username ../user.username}}
+        <form action="/delete/{{id}}" method="POST" class="inline-form">
+            <button type="submit" class="delete-button" data-id="{{id}}">Delete <i class="fas fa-trash-alt"></i></button>
+        </form>
+        {{else}}
+        <form action="/like/{{id}}" method="POST" class="inline-form">
+            <button type="submit" class="like-button" data-id="{{id}}">Like ♥</button>
+        </form>
+        {{/ifCond}}
+    </div>      
+    </div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.like-button').forEach(button => {
+            button.addEventListener('click', handleLikeClick);
+        });
+        document.querySelectorAll('.delete-button').forEach(button => {
+            button.addEventListener('click', handleDeleteClick);
+        });
+    });
+
+    function handleLikeClick(event) {
+        event.preventDefault();
+        const postId = event.target.getAttribute('data-id');
+        fetch(`/like/${postId}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.likes !== undefined) {
+                    document.querySelector(`#post-${postId} .like-count`).textContent = `Likes: ${data.likes}`;
+                } else {
+                    console.error('Error liking post:', data.error);
+                }
+            })
+            .catch(error => console.error('Error liking post:', error));
+    }
+
+    function handleDeleteClick(event) {
+        event.preventDefault();
+        const buttonElement = event.target.closest('.delete-button');
+        const postId = buttonElement.getAttribute('data-id');
+        fetch(`/delete/${postId}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.querySelector(`#post-${postId}`).remove();
+                } else {
+                    console.error('Error deleting post:', data.error);
+                }
+            })
+            .catch(error => console.error('Error deleting post:', error));
+    }
+</script>
