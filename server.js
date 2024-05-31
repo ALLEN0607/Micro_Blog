@@ -453,7 +453,6 @@ function renderProfile(req, res) {
 }
 
 // Function to update post likes
-// Function to update post likes
 // function updatePostLikes(postId, userId) {
 //     const post = posts.find(post => post.id === parseInt(postId));
 //     if (post && post.username !== findUserById(userId).username) {
