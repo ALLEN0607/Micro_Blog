@@ -181,12 +181,16 @@ app.get('/logout', (req, res) => {
   });
 });
 
-//
+
 app.get('/', async (req, res) => {
     try {
-        const posts = await getPosts();
+        const posts = await db.all('SELECT * FROM posts ORDER BY timestamp DESC');
+        const postsWithComments = await Promise.all(posts.map(async post => {
+            const comments = await db.all('SELECT * FROM comments WHERE postId = ? ORDER BY timestamp ASC', [post.id]);
+            return { ...post, comments };
+        }));
         const user = await getCurrentUser(req) || {};
-        res.render('home', { posts, user });
+        res.render('home', { posts: postsWithComments, user });
     } catch (err) {
         console.error('Error fetching posts:', err);
         res.status(500).send('Internal Server Error');
@@ -240,28 +244,32 @@ app.post('/posts', isAuthenticated, async (req, res) => {
     }
 });
 
-
-
-
 // Like a post
 app.post('/like/:id', isAuthenticated, async (req, res) => {
-    const postId = req.params.id;
-    const user = await getCurrentUser(req);
-    const post = await db.get('SELECT * FROM posts WHERE id = ?', [postId]);
-    if (post && post.username !== user.username) {
-        await db.run('UPDATE posts SET likes = likes + 1 WHERE id = ?', [postId]);
-        const updatedPost = await db.get('SELECT * FROM posts WHERE id = ?', [postId]);
-        res.json({ likes: updatedPost.likes });
-    } else {
-        res.json({ error: 'Cannot like your own post' });
+    try {
+        const postId = req.params.id;
+        const user = await getCurrentUser(req);
+        const post = await db.get('SELECT * FROM posts WHERE id = ?', [postId]);
+        if (post && post.username !== user.username) {
+            await db.run('UPDATE posts SET likes = likes + 1 WHERE id = ?', [postId]);
+            const updatedPost = await db.get('SELECT * FROM posts WHERE id = ?', [postId]);
+            res.json({ likes: updatedPost.likes });
+        } else {
+            res.json({ error: 'Cannot like your own post' });
+        }
+    } catch (err) {
+        console.error('Error liking post:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+
 
 // Profile
 app.get('/profile', isAuthenticated, async (req, res) => {
     const user = await getCurrentUser(req);
     const userPosts = await db.all('SELECT * FROM posts WHERE username = ? ORDER BY timestamp DESC', [user.username]);
-    res.render('profile', { user, posts: userPosts });
+    const favoritePosts = await db.all('SELECT posts.* FROM posts JOIN favorites ON posts.id = favorites.postId WHERE favorites.username = ?', [user.username]);
+    res.render('profile', { user, posts: userPosts, favorites: favoritePosts });
 });
 
 app.get('/avatar/:username', async (req, res) => {
@@ -326,25 +334,93 @@ app.get('/logout', (req, res) => {
     });
 });
 
-
 // Delete a post
 app.post('/delete/:id', isAuthenticated, async (req, res) => {
+    try {
+        const postId = req.params.id;
+        const user = await getCurrentUser(req);
+        const success = await deletePost(postId, user.id);
+        if (success) {
+            res.json({ success: true });
+        } else {
+            res.json({ error: 'You can only delete your own posts' });
+        }
+    } catch (err) {
+        console.error('Error deleting post:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Add a comment
+app.post('/comment/:id', isAuthenticated, async (req, res) => {
     const postId = req.params.id;
     const user = await getCurrentUser(req);
+    const { content } = req.body;
+
+    try {
+        await db.run('INSERT INTO comments (postId, username, content, timestamp) VALUES (?, ?, ?, ?)', [
+            postId, user.username, content, new Date().toISOString()
+        ]);
+        res.redirect('/');
+    } catch (err) {
+        console.error('Error adding comment:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Update Home_page
+app.get('/', async (req, res) => {
+    try {
+        const posts = await db.all('SELECT * FROM posts ORDER BY timestamp DESC');
+        const postsWithComments = await Promise.all(posts.map(async post => {
+            const comments = await db.all('SELECT * FROM comments WHERE postId = ? ORDER BY timestamp ASC', [post.id]);
+            return { ...post, comments };
+        }));
+        const user = await getCurrentUser(req) || {};
+        res.render('home', { posts: postsWithComments, user });
+    } catch (err) {
+        console.error('Error fetching posts:', err);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+// 获取帖子及其评论
+async function getPostWithComments(postId) {
     const post = await db.get('SELECT * FROM posts WHERE id = ?', [postId]);
-    if (post && post.username === user.username) {
-        await db.run('DELETE FROM posts WHERE id = ?', [postId]);
+    const comments = await db.all('SELECT * FROM comments WHERE postId = ? ORDER BY timestamp ASC', [postId]);
+    return { ...post, comments };
+}
+
+// Add to favorites
+app.post('/favorite/:id', isAuthenticated, async (req, res) => {
+    const postId = req.params.id;
+    const user = await getCurrentUser(req);
+
+    try {
+        // 检查用户是否已经收藏了该帖子
+        const existingFavorite = await db.get('SELECT * FROM favorites WHERE postId = ? AND username = ?', [postId, user.username]);
+        if (existingFavorite) {
+            return res.json({ error: 'You have already favorited this post' });
+        }
+
+        // 如果没有收藏则插入新记录
+        await db.run('INSERT INTO favorites (postId, username) VALUES (?, ?)', [postId, user.username]);
         res.json({ success: true });
-    } else {
-        res.json({ error: 'Cannot delete post' });
+    } catch (err) {
+        console.error('Error adding favorite:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
 
-app.post('/clear-posts', (req, res) => {
-    posts = [];
-    res.redirect('/');
+// Get user's favorites
+app.get('/favorites', isAuthenticated, async (req, res) => {
+    const user = await getCurrentUser(req);
+    const favoritePosts = await db.all('SELECT posts.* FROM posts JOIN favorites ON posts.id = favorites.postId WHERE favorites.username = ?', [user.username]);
+
+    res.render('favorites', { user, posts: favoritePosts });
 });
+
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Server Activation
@@ -491,6 +567,10 @@ async function getCurrentUser(req) {
     }
 }
 
+async function getPostComments(postId) {
+    const comments = await db.all('SELECT * FROM comments WHERE postId = ? ORDER BY timestamp DESC', [postId]);
+    return comments;
+}
 
 // Function to get all posts, sorted by latest first
 async function getPosts() {
@@ -512,14 +592,16 @@ async function addPost(title, content, user) {
     }
 }
 
-
-// Function to delete a post
-function deletePost(postId, userId) {
-    const postIndex = posts.findIndex(post => post.id === parseInt(postId));
-    if (postIndex > -1 && posts[postIndex].username === findUserById(userId).username) {
-        posts.splice(postIndex, 1);
+async function deletePost(postId, userId) {
+    const post = await db.get('SELECT * FROM posts WHERE id = ?', [postId]);
+    if (post && post.username === userId) {
+        await db.run('DELETE FROM posts WHERE id = ?', [postId]);
+        return true;
     }
+    return false;
 }
+
+
 
 
 // Function to generate an image avatar

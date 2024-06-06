@@ -27,6 +27,24 @@ async function initializeDB() {
             timestamp DATETIME NOT NULL,
             likes INTEGER NOT NULL DEFAULT 0
         );
+
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            postId INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp DATETIME NOT NULL,
+            FOREIGN KEY (postId) REFERENCES posts(id),
+            FOREIGN KEY (username) REFERENCES users(username)
+        );
+
+        CREATE TABLE IF NOT EXISTS favorites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            postId INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            FOREIGN KEY (postId) REFERENCES posts(id),
+            FOREIGN KEY (username) REFERENCES users(username)
+        );
     `);
 
     // Sample data - Replace these arrays with your own data

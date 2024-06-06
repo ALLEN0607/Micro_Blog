@@ -7,27 +7,60 @@
         <h3>{{title}}</h3>
         <p>{{content}}</p>
         <p>Posted by {{username}} at {{timestamp}}</p>
-    <div class="post-status-bar">
-        <span class="like-count">Likes: {{likes}}</span>
-        {{#ifCond username ../user.username}}
-        <form action="/delete/{{id}}" method="POST" class="inline-form">
-            <button type="submit" class="delete-button" data-id="{{id}}">Delete <i class="fas fa-trash-alt"></i></button>
-        </form>
-        {{else}}
-        <form action="/like/{{id}}" method="POST" class="inline-form">
-            <button type="submit" class="like-button" data-id="{{id}}">Like ♥</button>
-        </form>
-        {{/ifCond}}
-    </div>      
+        <div class="post-status-bar">
+            <span class="like-count">Likes: {{likes}}</span>
+            {{#ifCond username ../user.username}}
+            <form action="/delete/{{id}}" method="POST" class="inline-form">
+                <button type="submit" class="delete-button" data-id="{{id}}">Delete <i class="fas fa-trash-alt"></i></button>
+            </form>
+            {{else}}
+            <form action="/like/{{id}}" method="POST" class="inline-form">
+                <button type="submit" class="like-button" data-id="{{id}}">Like ♥</button>
+            </form>
+            <form action="/favorite/{{id}}" method="POST" class="inline-form">
+                <button type="submit" class="favorite-button" data-id="{{id}}">Favorite ★</button>
+            </form>
+            {{/ifCond}}
+        </div>
+        <div class="comments-section">
+            <h4>Comments:</h4>
+            {{#if comments.length}}
+                <ul>
+                    {{#each comments}}
+                        <li>
+                            <p>{{content}}</p>
+                            <small>By {{username}} at {{timestamp}}</small>
+                        </li>
+                    {{/each}}
+                </ul>
+            {{else}}
+                <p>No comments yet. Be the first to comment!</p>
+            {{/if}}
+            {{#if ../loggedIn}}
+            <form action="/comment/{{id}}" method="POST">
+                <input type="hidden" name="postId" value="{{id}}">
+                <textarea name="content" required></textarea>
+                <button type="submit">Add Comment</button>
+            </form>
+            {{else}}
+                <p>You must be logged in to comment.</p>
+            {{/if}}
+        </div>
     </div>
 </div>
+
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.like-button').forEach(button => {
             button.addEventListener('click', handleLikeClick);
         });
+
         document.querySelectorAll('.delete-button').forEach(button => {
             button.addEventListener('click', handleDeleteClick);
+        });
+
+        document.querySelectorAll('.favorite-button').forEach(button => {
+            button.addEventListener('click', handleFavoriteClick);
         });
     });
 
@@ -40,7 +73,7 @@
                 if (data.likes !== undefined) {
                     document.querySelector(`#post-${postId} .like-count`).textContent = `Likes: ${data.likes}`;
                 } else {
-                    console.error('Error liking post:', data.error);
+                    alert('You cannot like your own post');
                 }
             })
             .catch(error => console.error('Error liking post:', error));
@@ -48,17 +81,31 @@
 
     function handleDeleteClick(event) {
         event.preventDefault();
-        const buttonElement = event.target.closest('.delete-button');
-        const postId = buttonElement.getAttribute('data-id');
+        const postId = event.target.getAttribute('data-id');
         fetch(`/delete/${postId}`, { method: 'POST' })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     document.querySelector(`#post-${postId}`).remove();
                 } else {
-                    console.error('Error deleting post:', data.error);
+                    alert('You can only delete your own posts');
                 }
             })
             .catch(error => console.error('Error deleting post:', error));
+    }
+
+    function handleFavoriteClick(event) {
+        event.preventDefault();
+        const postId = event.target.getAttribute('data-id');
+        fetch(`/favorite/${postId}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Post favorited successfully!');
+                } else {
+                    alert('Error favoriting post.');
+                }
+            })
+            .catch(error => console.error('Error favoriting post:', error));
     }
 </script>

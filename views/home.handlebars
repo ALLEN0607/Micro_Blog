@@ -30,10 +30,27 @@
         <ul>
             {{#each posts}}
                 <li>
-                    <h3>{{this.title}}</h3>
-                    <p>{{this.content}}</p>
-                    <p><small>By {{this.username}} on {{this.timestamp}}</small></p>
-                    <p>Likes: {{this.likes}}</p>
+                    {{> post this user=../user}}
+                    <div class="comments">
+                        <h4>Comments:</h4>
+                        {{#if this.comments.length}}
+                            <ul>
+                                {{#each this.comments}}
+                                    <li>{{this.username}}: {{this.content}} ({{formatDate this.timestamp}})</li>
+                                {{/each}}
+                            </ul>
+                        {{else}}
+                            <p>No comments yet. Be the first to comment!</p>
+                        {{/if}}
+                        {{#if ../user}}
+                        <form action="/comment/{{this.id}}" method="POST">
+                            <textarea name="content" required></textarea>
+                            <button type="submit">Comment</button>
+                        </form>
+                        {{else}}
+                        <p>You must be logged in to comment.</p>
+                        {{/if}}
+                    </div>
                 </li>
             {{/each}}
         </ul>
@@ -53,7 +70,7 @@ function toggleEmojiPanel() {
     container.style.display = container.style.display === 'none' ? 'block' : 'none';
 
     if (container.style.display === 'block' && allEmojis.length === 0) {
-        fetch('https://emoji-api.com/emojis?access_key=your_access_key')
+        fetch('https://emoji-api.com/emojis?access_key=39b9075398a893f76b30d88b19e81271015d31f5')
             .then(response => response.json())
             .then(data => {
                 allEmojis = data;
@@ -96,4 +113,45 @@ function insertEmoji(emoji) {
     textarea.setSelectionRange(startPos + emoji.length, startPos + emoji.length);
     textarea.focus();  // Keep focus on the textarea
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.like-button').forEach(button => {
+        button.addEventListener('click', handleLikeClick);
+    });
+
+    document.querySelectorAll('.delete-button').forEach(button => {
+        button.addEventListener('click', handleDeleteClick);
+    });
+});
+
+function handleLikeClick(event) {
+    event.preventDefault();
+    const postId = event.target.getAttribute('data-id');
+    fetch(`/like/${postId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.likes !== undefined) {
+                document.querySelector(`#post-${postId} .like-count`).textContent = `Likes: ${data.likes}`;
+            } else {
+                alert('You cannot like your own post');
+            }
+        })
+        .catch(error => console.error('Error liking post:', error));
+}
+
+function handleDeleteClick(event) {
+    event.preventDefault();
+    const postId = event.target.getAttribute('data-id');
+    fetch(`/delete/${postId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.querySelector(`#post-${postId}`).remove();
+            } else {
+                alert('You can only delete your own posts');
+            }
+        })
+        .catch(error => console.error('Error deleting post:', error));
+}
+
 </script>
